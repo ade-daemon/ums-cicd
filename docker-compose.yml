@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    container_name: ums-db
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: users_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - ums-network
+
+  user-service:
+    build: ./user-service
+    container_name: ums-user-service
+    environment:
+      DATABASE_URL: postgresql://myuser:mypassword@db:5432/users_db
+    depends_on:
+      - db
+    ports:
+      - "5001:5001"
+    networks:
+      - ums-network
+
+  auth-service:
+    build: ./auth-service
+    container_name: ums-auth-service
+    ports:
+      - "5000:5000"
+    networks:
+      - ums-network
+
+  frontend:
+    build: ./frontend
+    container_name: ums-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - user-service
+      - auth-service
+    networks:
+      - ums-network
+
+volumes:
+  postgres_data:
+
+networks:
+  ums-network:
+

@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+
+# Docker
+*.log
+*.pid
+*.tar
+*.sock
+*.env
+
+# Local IDE
+.vscode/
+.idea/
+*.DS_Store
+
+# Volumes
+postgres_data/
+

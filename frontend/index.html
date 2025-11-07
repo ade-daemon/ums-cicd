@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>User Management</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #fafafa;
+      margin: 40px;
+    }
+    h1 { color: #333; }
+    button {
+      padding: 8px 16px;
+      margin-top: 8px;
+      cursor: pointer;
+      border: none;
+      background: #007BFF;
+      color: white;
+      border-radius: 6px;
+    }
+    button:hover { background: #0056b3; }
+    input {
+      margin: 4px;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+    #status {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>User Management Frontend</h1>
+
+  <section>
+    <h2>🔐 Login</h2>
+    <input id="username" placeholder="Username" />
+    <input id="password" type="password" placeholder="Password" />
+    <button onclick="login()">Login</button>
+    <p id="status"></p>
+  </section>
+
+  <section>
+    <h2>👥 Users</h2>
+    <button onclick="loadUsers()">Load Users</button>
+    <ul id="userList"></ul>
+  </section>
+
+  <script>
+    // ✅ Nginx proxy URLs (with trailing slashes)
+    const AUTH_URL = "/api/auth/";
+    const USER_URL = "/api/users/";
+
+    async function login() {
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+      const status = document.getElementById("status");
+
+      try {
+        const response = await fetch(`${AUTH_URL}login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          status.textContent = `✅ ${data.message} — Welcome, ${data.name}`;
+          status.style.color = "green";
+        } else {
+          status.textContent = `❌ ${data.error || "Login failed"}`;
+          status.style.color = "red";
+        }
+      } catch (error) {
+        status.textContent = "⚠️ Error connecting to auth-service.";
+        status.style.color = "red";
+      }
+    }
+
+    async function loadUsers() {
+      const list = document.getElementById('userList');
+      list.innerHTML = '<li>Loading...</li>';
+
+      try {
+        const response = await fetch(`${USER_URL}users`);
+        const users = await response.json();
+        list.innerHTML = '';
+        users.forEach(u => {
+          const li = document.createElement('li');
+          li.textContent = `${u.username} — ${u.email}`;
+          list.appendChild(li);
+        });
+      } catch (error) {
+        list.innerHTML = '<li>⚠️ Error fetching users.</li>';
+      }
+    }
+  </script>
+</body>
+</html>
+
