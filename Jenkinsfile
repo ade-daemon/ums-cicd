@@ -3,7 +3,8 @@ pipeline {
 
     environment {
         SONARQUBE = 'sonarqube'
-        REGISTRY_URL = credentials('nexus-registry-url')
+        REGISTRY_URL = credentials('REGISTRY_URL') 
+        REGISTRY_URL_yaml = credentials('REGISTRY_URL_yaml')
         IMAGE_TAG = "build-${BUILD_NUMBER}"
     }
 
@@ -23,13 +24,13 @@ pipeline {
             steps {
                 echo "🔹 Running static analysis..."
                 withSonarQubeEnv("${SONARQUBE}") {
-                    sh '''
+                    sh """
                     ${scannerHome}/bin/sonar-scanner \
                       -Dsonar.projectKey=ums-cicd \
                       -Dsonar.sources=. \
-                      -Dsonar.host.url=$SONAR_HOST_URL \
-                      -Dsonar.login=$SONAR_AUTH_TOKEN
-                    '''
+                      -Dsonar.host.url=${SONAR_HOST_URL} \
+                      -Dsonar.login=${SONAR_AUTH_TOKEN}
+                    """
                 }
             }
         }
@@ -46,19 +47,28 @@ pipeline {
         stage('Push Images to Nexus Registry') {
             steps {
                 echo "🚀 Pushing Docker images to Nexus Registry..."
-               withCredentials([usernamePassword(credentialsId: 'jenkins_nexus_sonarqube', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
-                    echo $NEXUS_PASS | docker login -u $NEXUS_USER --password-stdin $REGISTRY_URL
+                withCredentials([usernamePassword(
+                    credentialsId: 'jenkins_nexus_sonarqube',
+                    usernameVariable: 'NEXUS_USER',
+                    passwordVariable: 'NEXUS_PASS'
+                )]) {
+                    sh """
+                        echo "🔐 Logging in to Nexus Docker registry..."
+                        echo "\$NEXUS_PASS" | docker login -u "\$NEXUS_USER" --password-stdin ${REGISTRY_URL}
 
-                    docker tag ums-auth-service:latest $REGISTRY_URL/ums-auth-service:$IMAGE_TAG
-                    docker tag ums-user-service:latest $REGISTRY_URL/ums-user-service:$IMAGE_TAG
-                    docker tag ums-frontend:latest $REGISTRY_URL/ums-frontend:$IMAGE_TAG
+                        echo "🏷️ Tagging images..."
+                        docker tag ums-auth-service:latest ${REGISTRY_URL}/ums-auth-service:${IMAGE_TAG}
+                        docker tag ums-user-service:latest ${REGISTRY_URL}/ums-user-service:${IMAGE_TAG}
+                        docker tag ums-frontend:latest ${REGISTRY_URL}/ums-frontend:${IMAGE_TAG}
 
-                    docker push $REGISTRY_URL/ums-auth-service:$IMAGE_TAG
-                    docker push $REGISTRY_URL/ums-user-service:$IMAGE_TAG
-                    docker push $REGISTRY_URL/ums-frontend:$IMAGE_TAG
+                        echo "📤 Pushing images to Nexus..."
+                        docker push ${REGISTRY_URL}/ums-auth-service:${IMAGE_TAG}
+                        docker push ${REGISTRY_URL}/ums-user-service:${IMAGE_TAG}
+                        docker push ${REGISTRY_URL}/ums-frontend:${IMAGE_TAG}
 
-                    docker logout $REGISTRY_URL
-                    '''
+                        echo "🚪 Logging out..."
+                        docker logout ${REGISTRY_URL}
+                    """
                 }
             }
         }
@@ -66,19 +76,24 @@ pipeline {
         stage('Upload Docker Compose File (Optional)') {
             steps {
                 echo "📦 Uploading docker-compose.yml to Nexus raw repo..."
-                withCredentials([usernamePassword(credentialsId: 'nexus-docker-cred', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
-                    sh '''
-                    curl -u $NEXUS_USER:$NEXUS_PASS \
-                         --upload-file docker-compose.yml \
-                         http://$REGISTRY_URL/repository/ums-cicd-compose/docker-compose-${IMAGE_TAG}.yml
-                    '''
+                withCredentials([usernamePassword(
+                    credentialsId: 'jenkins_nexus_sonarqube',
+                    usernameVariable: 'NEXUS_USER',
+                    passwordVariable: 'NEXUS_PASS'
+                )]) {
+                    sh """
+                        echo "Uploading docker-compose.yml..."
+                        curl -u "\$NEXUS_USER:\$NEXUS_PASS" \
+                             --upload-file docker-compose.yml \
+                             ${REGISTRY_URL_yaml}/docker-compose-${IMAGE_TAG}.yml
+                    """
                 }
             }
         }
 
         stage('Deployment (Optional)') {
             steps {
-                echo "⚙️  Deployment placeholder — can be configured to SSH into Docker host and pull latest images."
+                echo "⚙️ Deployment placeholder — can SSH into Docker host to pull latest images later."
             }
         }
     }
@@ -96,7 +111,7 @@ pipeline {
         }
 
         failure {
-            echo "❌ Pipeline failed. Check logs for errors."
+            echo "❌ Pipeline failed. Check logs for details."
         }
     }
 }
