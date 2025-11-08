@@ -4,8 +4,8 @@ pipeline {
     environment {
         SONARQUBE = 'sonarqube'
         REGISTRY_URL = credentials('nexus-registry-url')
-        REGISTRY_USER = credentials('nexus-username')
-        REGISTRY_PASS = credentials('nexus-password')
+        #REGISTRY_USER = credentials('nexus-username')
+        #REGISTRY_PASS = credentials('nexus-password')
         IMAGE_TAG = "build-${BUILD_NUMBER}"
     }
 
@@ -48,8 +48,7 @@ pipeline {
         stage('Push Images to Nexus Registry') {
             steps {
                 echo "🚀 Pushing Docker images to Nexus Registry..."
-                withCredentials([usernamePassword(credentialsId: 'nexus-docker-cred', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
-                    sh '''
+               withCredentials([usernamePassword(credentialsId: 'jenkins_nexus_sonarqube', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
                     echo $NEXUS_PASS | docker login -u $NEXUS_USER --password-stdin $REGISTRY_URL
 
                     docker tag ums-auth-service:latest $REGISTRY_URL/ums-auth-service:$IMAGE_TAG
