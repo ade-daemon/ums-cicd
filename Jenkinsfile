@@ -4,8 +4,6 @@ pipeline {
     environment {
         SONARQUBE = 'sonarqube'
         REGISTRY_URL = credentials('nexus-registry-url')
-        #REGISTRY_USER = credentials('nexus-username')
-        #REGISTRY_PASS = credentials('nexus-password')
         IMAGE_TAG = "build-${BUILD_NUMBER}"
     }
 
