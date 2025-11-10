@@ -1,118 +1,89 @@
 pipeline {
-    agent { label 'docker-agent' }
+    agent { label 'ums-agent' }  // Make sure your Jenkins agent node has this label
 
     environment {
-        SONARQUBE = 'sonarqube'
-        REGISTRY_URL = credentials('REGISTRY_URL') 
-        REGISTRY_URL_yaml = credentials('REGISTRY_URL_yaml')
-        IMAGE_TAG = "build-${BUILD_NUMBER}"
+        PYTHON_ENV = "venv"
+        SONARQUBE = 'sonarqube' // Must match the name in Jenkins global config
+        SONAR_HOST_URL = "http://192.168.56.23:9000" // IP of Manager VM SonarQube
+        SONAR_PROJECT_KEY = "ums-cicd"
+        NEXUS_REPO_URL = "http://192.168.56.23:8081/repository/ums/"
+        BUILD_VERSION = "0.1.${BUILD_NUMBER}"
     }
 
     stages {
-
-        stage('Checkout Code') {
+        stage('Setup Python Environment') {
             steps {
-                echo "🔹 Checking out UMS-CICD repository..."
-                checkout scm
+                echo "🔹 Setting up Python virtual environment..."
+                sh '''
+                python3 -m venv ${PYTHON_ENV}
+                . ${PYTHON_ENV}/bin/activate
+                pip install --upgrade pip setuptools wheel
+                pip install -r requirements.txt
+                '''
             }
         }
 
         stage('SonarQube Analysis') {
             environment {
-                scannerHome = tool 'SonarQubeScanner'
+                scannerHome = tool 'SonarQubeScanner'  // Must match tool name in Jenkins config
             }
             steps {
-                echo "🔹 Running static analysis..."
+                echo "🔹 Running SonarQube static code analysis..."
                 withSonarQubeEnv("${SONARQUBE}") {
-                    sh """
+                    sh '''
+                    . ${PYTHON_ENV}/bin/activate
                     ${scannerHome}/bin/sonar-scanner \
-                      -Dsonar.projectKey=ums-cicd \
+                      -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                       -Dsonar.sources=. \
                       -Dsonar.host.url=${SONAR_HOST_URL} \
                       -Dsonar.login=${SONAR_AUTH_TOKEN}
-                    """
+                    '''
                 }
             }
         }
 
-        stage('Build Docker Images') {
+        stage('Build Artifact') {
             steps {
-                echo "🐳 Building Docker images for all services..."
+                echo "🔹 Building UMS package version ${BUILD_VERSION}..."
                 sh '''
-                docker compose build
+                . ${PYTHON_ENV}/bin/activate
+                python setup.py sdist
+                echo "✅ Build complete. Artifacts:"
+                ls -lh dist/
                 '''
             }
         }
 
-        stage('Push Images to Nexus Registry') {
+        stage('Upload to Nexus') {
             steps {
-                echo "🚀 Pushing Docker images to Nexus Registry..."
-                withCredentials([usernamePassword(
-                    credentialsId: 'jenkins_nexus_sonarqube',
-                    usernameVariable: 'NEXUS_USER',
-                    passwordVariable: 'NEXUS_PASS'
-                )]) {
-                    sh """
-                        echo "🔐 Logging in to Nexus Docker registry..."
-                        echo "\$NEXUS_PASS" | docker login -u "\$NEXUS_USER" --password-stdin ${REGISTRY_URL}
-
-                        echo "🏷️ Tagging images..."
-                        docker tag ums-auth-service:latest ${REGISTRY_URL}/ums-auth-service:${IMAGE_TAG}
-                        docker tag ums-user-service:latest ${REGISTRY_URL}/ums-user-service:${IMAGE_TAG}
-                        docker tag ums-frontend:latest ${REGISTRY_URL}/ums-frontend:${IMAGE_TAG}
-
-                        echo "📤 Pushing images to Nexus..."
-                        docker push ${REGISTRY_URL}/ums-auth-service:${IMAGE_TAG}
-                        docker push ${REGISTRY_URL}/ums-user-service:${IMAGE_TAG}
-                        docker push ${REGISTRY_URL}/ums-frontend:${IMAGE_TAG}
-
-                        echo "🚪 Logging out..."
-                        docker logout ${REGISTRY_URL}
-                    """
+                echo "🔹 Uploading artifacts to Nexus..."
+                withCredentials([usernamePassword(credentialsId: 'nexus-token', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
+                    sh '''
+                    for file in dist/*; do
+                        echo "Uploading $file ..."
+                        curl -u $NEXUS_USER:$NEXUS_PASS \
+                             --upload-file "$file" \
+                             ${NEXUS_REPO_URL}
+                    done
+                    '''
                 }
-            }
-        }
-
-        stage('Upload Docker Compose File (Optional)') {
-            steps {
-                echo "📦 Uploading docker-compose.yml to Nexus raw repo..."
-                withCredentials([usernamePassword(
-                    credentialsId: 'jenkins_nexus_sonarqube',
-                    usernameVariable: 'NEXUS_USER',
-                    passwordVariable: 'NEXUS_PASS'
-                )]) {
-                    sh """
-                        echo "Uploading docker-compose.yml..."
-                        curl -u "\$NEXUS_USER:\$NEXUS_PASS" \
-                             --upload-file docker-compose.yml \
-                             ${REGISTRY_URL_yaml}/docker-compose-${IMAGE_TAG}.yml
-                    """
-                }
-            }
-        }
-
-        stage('Deployment (Optional)') {
-            steps {
-                echo "⚙️ Deployment placeholder — can SSH into Docker host to pull latest images later."
             }
         }
     }
 
     post {
-        always {
-            echo "🧹 Cleaning up temporary Docker data..."
-            sh '''
-            docker image prune -af || true
-            '''
-        }
-
         success {
-            echo "✅ CI/CD Pipeline for UMS completed successfully! Images pushed with tag: ${IMAGE_TAG}"
+            echo "✅ Pipeline completed successfully!"
         }
-
         failure {
-            echo "❌ Pipeline failed. Check logs for details."
+            echo "❌ Pipeline failed. Check console logs for details."
+        }
+        always {
+            echo "🧹 Cleaning workspace..."
+            sh 'deactivate || true'
+            sh 'rm -rf venv || true'
         }
     }
 }
+
 
