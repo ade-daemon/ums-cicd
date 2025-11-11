@@ -83,21 +83,17 @@ pipeline {
         }
 
         stage('Build Frontend') {
-            steps {
-                echo "🌐 Building frontend..."
-                sh '''
-                cd frontend
-                npm install
-                npm run build
+    steps {
+        echo "🌐 Frontend is plain HTML/CSS — no build needed."
+        sh '''
+        # Optionally, just copy frontend files to dist for artifact upload
+        mkdir -p dist/frontend
+        cp -r frontend/* dist/frontend/
+        ls -l dist/frontend
+        '''
+    }
+}
 
-                echo "Packaging Nginx config..."
-                mkdir -p ../dist/frontend
-                cp -r dist/* ../dist/frontend/
-                cp nginx.conf ../dist/frontend/
-                cd ..
-                '''
-            }
-        }
 
         stage('Upload to Nexus') {
             steps {
