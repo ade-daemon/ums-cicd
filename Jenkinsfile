@@ -1,13 +1,13 @@
 pipeline {
-    agent { label 'ums-agent' }  // Make sure your Jenkins agent node has this label
+    agent { label 'ums-agent' }
 
     environment {
         PYTHON_ENV = "venv"
-        SONARQUBE = 'sonarqube' // Must match the name in Jenkins global config
-        SONAR_HOST_URL = "http://192.168.56.23:9000" // IP of Manager VM SonarQube
+        SONARQUBE = 'sonarqube'
+        SONAR_HOST_URL = "http://192.168.56.23:9000"
         SONAR_PROJECT_KEY = "ums-cicd"
         NEXUS_REPO_URL = "http://192.168.56.23:8081/repository/ums/"
-        BUILD_VERSION = "0.1.${BUILD_NUMBER}"
+        BUILD_VERSION = "0.2.${BUILD_NUMBER}"
     }
 
     stages {
@@ -18,14 +18,30 @@ pipeline {
                 python3 -m venv ${PYTHON_ENV}
                 . ${PYTHON_ENV}/bin/activate
                 pip install --upgrade pip setuptools wheel
-                pip install -r requirements.txt
+
+                echo "Installing dependencies for user-service..."
+                pip install -r user-service/requirements.txt
+
+                echo "Installing dependencies for auth-service..."
+                pip install -r auth-service/requirements.txt
+                '''
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                echo "🧪 Running backend tests..."
+                sh '''
+                . ${PYTHON_ENV}/bin/activate
+                pytest auth-service/tests || true
+                pytest user-service/tests || true
                 '''
             }
         }
 
         stage('SonarQube Analysis') {
             environment {
-                scannerHome = tool 'SonarQubeScanner'  // Must match tool name in Jenkins config
+                scannerHome = tool 'SonarQubeScanner'
             }
             steps {
                 echo "🔹 Running SonarQube static code analysis..."
@@ -34,7 +50,7 @@ pipeline {
                     . ${PYTHON_ENV}/bin/activate
                     ${scannerHome}/bin/sonar-scanner \
                       -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                      -Dsonar.sources=. \
+                      -Dsonar.sources=auth-service,user-service,frontend \
                       -Dsonar.host.url=${SONAR_HOST_URL} \
                       -Dsonar.login=${SONAR_AUTH_TOKEN}
                     '''
@@ -42,29 +58,67 @@ pipeline {
             }
         }
 
-        stage('Build Artifact') {
+        stage('Build Python Artifacts') {
             steps {
-                echo "🔹 Building UMS package version ${BUILD_VERSION}..."
+                echo "🔹 Building backend packages..."
                 sh '''
                 . ${PYTHON_ENV}/bin/activate
+                mkdir -p dist
+
+                echo "Building auth-service..."
+                cd auth-service
                 python setup.py sdist
-                echo "✅ Build complete. Artifacts:"
-                ls -lh dist/
+                cp dist/* ../dist/
+                cd ..
+
+                echo "Building user-service..."
+                cd user-service
+                python setup.py sdist
+                cp dist/* ../dist/
+                cd ..
+
+                echo "✅ Backend builds complete."
+                '''
+            }
+        }
+
+        stage('Build Frontend') {
+            steps {
+                echo "🌐 Building frontend..."
+                sh '''
+                cd frontend
+                npm install
+                npm run build
+
+                echo "Packaging Nginx config..."
+                mkdir -p ../dist/frontend
+                cp -r dist/* ../dist/frontend/
+                cp nginx.conf ../dist/frontend/
+                cd ..
                 '''
             }
         }
 
         stage('Upload to Nexus') {
             steps {
-                echo "🔹 Uploading artifacts to Nexus..."
+                echo "🚀 Uploading artifacts to Nexus..."
                 withCredentials([usernamePassword(credentialsId: 'nexus-token', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
                     sh '''
                     for file in dist/*; do
-                        echo "Uploading $file ..."
-                        curl -u $NEXUS_USER:$NEXUS_PASS \
-                             --upload-file "$file" \
-                             ${NEXUS_REPO_URL}
+                        if [ -f "$file" ]; then
+                            echo "Uploading $file ..."
+                            curl -u $NEXUS_USER:$NEXUS_PASS \
+                                 --upload-file "$file" \
+                                 ${NEXUS_REPO_URL}
+                        fi
                     done
+
+                    echo "Uploading frontend bundle as tar..."
+                    cd dist
+                    tar -czf frontend-${BUILD_VERSION}.tar.gz frontend
+                    curl -u $NEXUS_USER:$NEXUS_PASS \
+                         --upload-file frontend-${BUILD_VERSION}.tar.gz \
+                         ${NEXUS_REPO_URL}
                     '''
                 }
             }
@@ -81,9 +135,10 @@ pipeline {
         always {
             echo "🧹 Cleaning workspace..."
             sh 'deactivate || true'
-            sh 'rm -rf venv || true'
+            sh 'rm -rf venv dist || true'
         }
     }
 }
+
 
 
