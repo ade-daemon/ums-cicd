@@ -100,21 +100,12 @@ pipeline {
                 echo "🚀 Uploading artifacts to Nexus..."
                 withCredentials([usernamePassword(credentialsId: 'nexus-token', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
                     sh '''
-                    for file in dist/*; do
-                        if [ -f "$file" ]; then
-                            echo "Uploading $file ..."
-                            curl -u $NEXUS_USER:$NEXUS_PASS \
-                                 --upload-file "$file" \
-                                 ${NEXUS_REPO_URL}
-                        fi
+                    find dist -type f | while read file; do
+                        echo "Uploading $file ..."
+                        curl -u $NEXUS_USER:$NEXUS_PASS \
+                             --upload-file "$file" \
+                             ${NEXUS_REPO_URL}
                     done
-
-                    echo "Uploading frontend bundle as tar..."
-                    cd dist
-                    tar -czf frontend-${BUILD_VERSION}.tar.gz frontend
-                    curl -u $NEXUS_USER:$NEXUS_PASS \
-                         --upload-file frontend-${BUILD_VERSION}.tar.gz \
-                         ${NEXUS_REPO_URL}
                     '''
                 }
             }
