@@ -13,7 +13,7 @@ pipeline {
     stages {
         stage('Setup Python Environment') {
             steps {
-                echo "🔹 Setting up Python virtual environment..."
+                echo " Setting up Python virtual environment..."
                 sh '''
                 python3 -m venv ${PYTHON_ENV}
                 . ${PYTHON_ENV}/bin/activate
@@ -30,7 +30,7 @@ pipeline {
 
         stage('Run Tests') {
             steps {
-                echo "🧪 Running backend tests..."
+                echo " Running backend tests..."
                 sh '''
                 . ${PYTHON_ENV}/bin/activate
                 pytest auth-service/tests || true
@@ -44,7 +44,7 @@ pipeline {
                 scannerHome = tool 'SonarQubeScanner'
             }
             steps {
-                echo "🔹 Running SonarQube static code analysis..."
+                echo " Running SonarQube static code analysis..."
                 withSonarQubeEnv("${SONARQUBE}") {
                     sh '''
                     . ${PYTHON_ENV}/bin/activate
@@ -60,7 +60,7 @@ pipeline {
 
        stage('Build Python Artifacts') {
     steps {
-        echo "🔹 Building backend packages..."
+        echo " Building backend packages..."
         sh '''
         . ${PYTHON_ENV}/bin/activate
         rm -rf dist
@@ -86,14 +86,14 @@ pipeline {
         done
         cd ../..
 
-        echo "✅ Backend builds complete. Contents of dist/:"
+        echo " Backend builds complete. Contents of dist/:"
         ls -l dist
         '''
     }
 }
         stage('Build Frontend Docker Image') {
     steps {
-        echo "🧱 Building Nginx image for frontend..."
+        echo " Building Nginx image for frontend..."
         sh '''
         cd frontend
         docker build -t ums-frontend:${BUILD_VERSION} .
@@ -105,7 +105,7 @@ pipeline {
 
 stage('Upload to Nexus') {
     steps {
-        echo "🚀 Uploading versioned artifacts to Nexus..."
+        echo " Uploading versioned artifacts to Nexus..."
         withCredentials([usernamePassword(credentialsId: 'nexus-token', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
             sh '''
             for file in dist/*.tar.gz; do
@@ -124,13 +124,13 @@ stage('Upload to Nexus') {
 
     post {
         success {
-            echo "✅ Pipeline completed successfully!"
+            echo " Pipeline completed successfully!"
         }
         failure {
-            echo "❌ Pipeline failed. Check console logs for details."
+            echo " Pipeline failed. Check console logs for details."
         }
         always {
-            echo "🧹 Cleaning workspace..."
+            echo " Cleaning workspace..."
             sh 'deactivate || true'
             sh 'rm -rf venv dist || true'
         }
