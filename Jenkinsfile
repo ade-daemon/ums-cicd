@@ -91,6 +91,17 @@ pipeline {
         '''
     }
 }
+        stage('Build Frontend Docker Image') {
+    steps {
+        echo "🧱 Building Nginx image for frontend..."
+        sh '''
+        cd frontend
+        docker build -t ums-frontend:${BUILD_VERSION} .
+        docker save ums-frontend:${BUILD_VERSION} -o ../dist/ums-frontend-${BUILD_VERSION}.tar
+        '''
+    }
+}
+
 
 stage('Upload to Nexus') {
     steps {
