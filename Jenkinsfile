@@ -58,58 +58,57 @@ pipeline {
             }
         }
 
-        stage('Build Python Artifacts') {
-            steps {
-                echo "🔹 Building backend packages..."
-                sh '''
-                . ${PYTHON_ENV}/bin/activate
-                mkdir -p dist
-
-                echo "Building auth-service..."
-                cd auth-service
-                python setup.py sdist
-                cp dist/* ../dist/
-                cd ..
-
-                echo "Building user-service..."
-                cd user-service
-                python setup.py sdist
-                cp dist/* ../dist/
-                cd ..
-
-                echo "✅ Backend builds complete."
-                '''
-            }
-        }
-
-        stage('Build Frontend') {
+       stage('Build Python Artifacts') {
     steps {
-        echo "🌐 Frontend is plain HTML/CSS — no build needed."
+        echo "🔹 Building backend packages..."
         sh '''
-        # Optionally, just copy frontend files to dist for artifact upload
-        mkdir -p dist/frontend
-        cp -r frontend/* dist/frontend/
-        ls -l dist/frontend
+        . ${PYTHON_ENV}/bin/activate
+        rm -rf dist
+        mkdir -p dist
+
+        echo "Building auth-service..."
+        cd auth-service
+        python setup.py sdist
+        cd dist
+        for f in *.tar.gz; do
+            mv "$f" "auth-service-${BUILD_VERSION}.tar.gz"
+            cp "auth-service-${BUILD_VERSION}.tar.gz" ../../dist/
+        done
+        cd ../..
+
+        echo "Building user-service..."
+        cd user-service
+        python setup.py sdist
+        cd dist
+        for f in *.tar.gz; do
+            mv "$f" "user-service-${BUILD_VERSION}.tar.gz"
+            cp "user-service-${BUILD_VERSION}.tar.gz" ../../dist/
+        done
+        cd ../..
+
+        echo "✅ Backend builds complete. Contents of dist/:"
+        ls -l dist
         '''
     }
 }
 
-
-        stage('Upload to Nexus') {
-            steps {
-                echo "🚀 Uploading artifacts to Nexus..."
-                withCredentials([usernamePassword(credentialsId: 'nexus-token', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
-                    sh '''
-                    find dist -type f | while read file; do
-                        echo "Uploading $file ..."
-                        curl -u $NEXUS_USER:$NEXUS_PASS \
-                             --upload-file "$file" \
-                             ${NEXUS_REPO_URL}
-                    done
-                    '''
-                }
-            }
+stage('Upload to Nexus') {
+    steps {
+        echo "🚀 Uploading versioned artifacts to Nexus..."
+        withCredentials([usernamePassword(credentialsId: 'nexus-token', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
+            sh '''
+            for file in dist/*.tar.gz; do
+                fname=$(basename "$file")
+                echo "Uploading $fname ..."
+                curl -u $NEXUS_USER:$NEXUS_PASS \
+                     --upload-file "$file" \
+                     ${NEXUS_REPO_URL}$fname
+            done
+            '''
         }
+    }
+}
+
     }
 
     post {
