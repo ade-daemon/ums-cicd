@@ -97,7 +97,7 @@ pipeline {
         sh '''
         cd frontend
         docker build -t ums-frontend:${BUILD_VERSION} .
-        docker save ums-frontend:${BUILD_VERSION} -o ../dist/ums-frontend-${BUILD_VERSION}.tar
+        docker save ums-frontend:${BUILD_VERSION} -o ../dist/ums-frontend-${BUILD_VERSION}.tar.gz
         '''
     }
 }
